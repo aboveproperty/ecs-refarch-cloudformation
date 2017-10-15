@@ -1,25 +1,114 @@
 Description: >
 
-    This template deploys a VPC, with a pair of public and private subnets spread 
-    across two Availabilty Zones. It deploys an Internet Gateway, with a default 
-    route on the public subnets. It deploys a pair of NAT Gateways (one in each AZ), 
+    This template deploys a VPC, with a pair of public and private subnets spread
+    across two Availabilty Zones. It deploys an Internet Gateway, with a default
+    route on the public subnets. It deploys a pair of NAT Gateways (one in each AZ),
     and default routes for them in the private subnets.
 
-    It then deploys a highly available ECS cluster using an AutoScaling Group, with 
-    ECS hosts distributed across multiple Availability Zones. 
+    It then deploys a highly available ECS cluster using an AutoScaling Group, with
+    ECS hosts distributed across multiple Availability Zones.
 
-    Finally, it deploys a pair of example ECS services from containers published in 
+    Finally, it deploys a pair of example ECS services from containers published in
     Amazon EC2 Container Registry (Amazon ECR).
 
     Last Modified: 22nd September 2016
     Author: Paul Maddox <pmaddox@amazon.com>
 
+Mappings:
+  AWSInfoRegionMap:
+    ap-northeast-1:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    ap-northeast-2:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    ap-south-1:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    ap-southeast-1:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    ap-southeast-2:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    ca-central-1:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    eu-central-1:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    eu-west-1:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    eu-west-2:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    sa-east-1:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    us-east-1:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    us-east-2:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    us-gov-west-1:
+      Partition: aws-us-gov
+      S3URL: https://s3-us-gov-west-1.amazonaws.com
+    us-west-1:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+    us-west-2:
+      Partition: aws
+      S3URL: https://s3.amazonaws.com
+Parameters:
+    pEnvironment:
+        Description: The name of the environment in which this stack is being launched (prod, stage, dev, etc)
+        Type: String
+    pCFS3BucketName:
+        AllowedPattern: ^[0-9a-zA-Z]+([0-9a-zA-Z-.]*[0-9a-zA-Z])*$
+        ConstraintDescription: Bucket name can include numbers, lowercase
+          letters, uppercase letters, periods (.), and hyphens (-). It cannot start or
+          end with a hyphen (-).
+        Default: abvprp-cloudformation-templates
+        Description: S3 bucket name for the cloudformation assets. Bucket name
+          can include numbers, lowercase letters, uppercase letters, and hyphens (-).
+          It cannot start or end with a hyphen (-).
+        Type: String
+    pCFS3KeyPrefix:
+        AllowedPattern: ^[0-9a-zA-Z-]+(/[0-9a-zA-Z-]+)*$
+        ConstraintDescription: Quick Start key prefix can include numbers, lowercase letters,
+          uppercase letters, hyphens (-), and forward slash (/). It cannot start or end
+          with forward slash (/) because they are automatically appended.
+        Default: payment-services-gateway
+        Description: S3 key prefix for the cloudformation assets. Key prefix
+          can include numbers, lowercase letters, uppercase letters, hyphens (-), and
+          forward slash (/). It cannot start or end with forward slash (/) because they
+          are automatically appended.
+        Type: String
+
 Resources:
+
+    SSLCertificate:
+        Type: "AWS::CloudFormation::Stack"
+        Properties:
+          Parameters:
+            domain: book.stage.aboveproperty.com
+            hostedZoneName: stage.abovepropertyl.com.
+          TemplateURL: "https://s3-eu-west-1.amazonaws.com/is24-infrastructure-public/cloudformation/verified-ssl-certificate/ssl-certificate.template.yaml"
 
     VPC:
         Type: AWS::CloudFormation::Stack
         Properties:
-            TemplateURL: https://s3.amazonaws.com/ecs-refarch-cloudformation/infrastructure/vpc.yaml
+            TemplateURL:
+                !Sub
+                - ${S3URL}/${pCFS3BucketName}/${pCFS3KeyPrefix}/infrastructure/vpc.yaml
+                - S3URL:
+                    !FindInMap
+                    - AWSInfoRegionMap
+                    - !Ref AWS::Region
+                    - S3URL
+              TimeoutInMinutes: 20
             Parameters:
                 EnvironmentName:    !Ref AWS::StackName
                 VpcCIDR:            10.180.0.0/16
@@ -31,15 +120,30 @@ Resources:
     SecurityGroups:
         Type: AWS::CloudFormation::Stack
         Properties:
-            TemplateURL: https://s3.amazonaws.com/ecs-refarch-cloudformation/infrastructure/security-groups.yaml
-            Parameters: 
+            TemplateURL:
+                !Sub
+                - ${S3URL}/${pCFS3BucketName}/${pCFS3KeyPrefix}/infrastructure/security-groups.yaml
+                - S3URL:
+                    !FindInMap
+                    - AWSInfoRegionMap
+                    - !Ref AWS::Region
+                    - S3URL
+              TimeoutInMinutes: 20
+            Parameters:
                 EnvironmentName: !Ref AWS::StackName
                 VPC: !GetAtt VPC.Outputs.VPC
 
     ALB:
         Type: AWS::CloudFormation::Stack
         Properties:
-            TemplateURL: https://s3.amazonaws.com/ecs-refarch-cloudformation/infrastructure/load-balancers.yaml
+            TemplateURL:
+                !Sub
+                    - ${S3URL}/${pCFS3BucketName}/${pCFS3KeyPrefix}/infrastructure/load-balancers.yaml
+                    - S3URL:
+                        !FindInMap
+                        - AWSInfoRegionMap
+                        - !Ref AWS::Region
+                        - S3URL
             Parameters:
                 EnvironmentName: !Ref AWS::StackName
                 VPC: !GetAtt VPC.Outputs.VPC
@@ -49,7 +153,14 @@ Resources:
     ECS:
         Type: AWS::CloudFormation::Stack
         Properties:
-            TemplateURL: https://s3.amazonaws.com/ecs-refarch-cloudformation/infrastructure/ecs-cluster.yaml
+            TemplateURL:
+                !Sub
+                    - ${S3URL}/${pCFS3BucketName}/${pCFS3KeyPrefix}/infrastructure/ecs-cluster.yaml
+                    - S3URL:
+                        !FindInMap
+                        - AWSInfoRegionMap
+                        - !Ref AWS::Region
+                        - S3URL
             Parameters:
                 EnvironmentName: !Ref AWS::StackName
                 InstanceType: t2.large
@@ -61,33 +172,47 @@ Resources:
     ProductService:
         Type: AWS::CloudFormation::Stack
         Properties:
-            TemplateURL: https://s3.amazonaws.com/ecs-refarch-cloudformation/services/product-service/service.yaml
+            TemplateURL:
+                !Sub
+                    - ${S3URL}/${pCFS3BucketName}/${pCFS3KeyPrefix}/services/product-service/service.yaml
+                    - S3URL:
+                        !FindInMap
+                        - AWSInfoRegionMap
+                        - !Ref AWS::Region
+                        - S3URL
             Parameters:
                 VPC: !GetAtt VPC.Outputs.VPC
                 Cluster: !GetAtt ECS.Outputs.Cluster
                 DesiredCount: 2
-                Listener: !GetAtt ALB.Outputs.Listener 
+                Listener: !GetAtt ALB.Outputs.Listener
                 Path: /products
 
     WebsiteService:
         Type: AWS::CloudFormation::Stack
         Properties:
-            TemplateURL: https://s3.amazonaws.com/ecs-refarch-cloudformation/services/website-service/service.yaml
+            TemplateURL:
+                !Sub
+                    - ${S3URL}/${pCFS3BucketName}/${pCFS3KeyPrefix}/services/website-service/service.yaml
+                    - S3URL:
+                        !FindInMap
+                        - AWSInfoRegionMap
+                        - !Ref AWS::Region
+                        - S3URL
             Parameters:
                 VPC: !GetAtt VPC.Outputs.VPC
                 Cluster: !GetAtt ECS.Outputs.Cluster
                 DesiredCount: 2
                 ProductServiceUrl: !Join [ "/", [ !GetAtt ALB.Outputs.LoadBalancerUrl, "products" ]]
-                Listener: !GetAtt ALB.Outputs.Listener 
+                Listener: !GetAtt ALB.Outputs.Listener
                 Path: /
 
 
 Outputs:
 
-    ProductServiceUrl: 
+    ProductServiceUrl:
         Description: The URL endpoint for the product service
         Value: !Join [ "/", [ !GetAtt ALB.Outputs.LoadBalancerUrl, "products" ]]
 
-    WebsiteServiceUrl: 
+    WebsiteServiceUrl:
         Description: The URL endpoint for the website service
         Value: !Join ["", [ !GetAtt ALB.Outputs.LoadBalancerUrl, "/" ]]
